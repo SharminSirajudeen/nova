@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+import sys
+import os
+
+# Use default Ollama storage location
+# os.environ['OLLAMA_MODELS'] = '/Volumes/SandiskSSD/NOVA/ollama/models'
+
+sys.path.insert(0, '/Users/sharminsirajudeen/nova')
+from src.main import main
+import asyncio
+
+if __name__ == "__main__":
+    asyncio.run(main())
