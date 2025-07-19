@@ -53,8 +53,8 @@ logs/
 ~/.nova/
 .nova/
 cost_tracking.json
-memory/
-models/
+# memory/  # Commented out - we want to track src/memory
+# models/  # Commented out - we want to track src/models
 *.key
 
 # Environment variables
