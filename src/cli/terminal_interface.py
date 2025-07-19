@@ -51,7 +51,8 @@ class NOVATerminalInterface:
             '/help', '/status', '/memory', '/models', '/clear', '/exit', '/reset',
             '/history', '/export', '/import', '/cost', '/benchmark',
             '/install', '/update', '/voice', '/screenshot', '/record',
-            '/analyze', '/evolve', '/suggest', '/improve'
+            '/analyze', '/evolve', '/suggest', '/improve',
+            '/mode', '/company', '/project', '/team'
         ]
         
         # Session state
@@ -77,6 +78,7 @@ class NOVATerminalInterface:
 
 🖥️  System: {system_tier} tier Mac
 🧠 AI Models: {len(self.nova_core._get_available_models())} available ({self.nova_core.get_current_model_name()})
+🏢 Mode: {self.nova_core.get_current_mode().title()}
 💰 Budget: $10/month (optimized routing)
 
 Type your request or use:
@@ -114,6 +116,12 @@ Type your request or use:
                 ("/evolve", "View evolution progress with you"),
                 ("/suggest", "Get AI-powered suggestions"),
                 ("/improve", "Show self-improvement plan")
+            ],
+            "Mode & Company Commands": [
+                ("/mode [mode]", "Switch between personal/company modes"),
+                ("/company", "Show company dashboard (company mode)"),
+                ("/project <cmd>", "Project management (company mode)"),
+                ("/team", "Show AI development team (company mode)")
             ],
             "Productivity Commands": [
                 ("/screenshot", "Take and analyze screenshot"),
@@ -406,6 +414,14 @@ Type your request or use:
             await self.show_suggestions()
         elif cmd == '/improve':
             await self.show_improvement_plan()
+        elif cmd == '/mode':
+            await self.handle_mode_command(args)
+        elif cmd == '/company':
+            await self.handle_company_command(args)
+        elif cmd == '/project':
+            await self.handle_project_command(args)
+        elif cmd == '/team':
+            await self.show_team_info()
         else:
             self.console.print(f"[red]Unknown command: {command}[/red]")
             self.console.print("[dim]Type /help for available commands[/dim]")
@@ -1735,3 +1751,197 @@ Progress: {evolution_progress:.1f}%
                 return stage
                 
         return None
+    
+    async def handle_mode_command(self, args: str):
+        """Handle mode switching command"""
+        if not args:
+            # Show current mode
+            current_mode = self.nova_core.get_current_mode()
+            self.console.print(Panel(
+                f"Current mode: [bold cyan]{current_mode.title()}[/bold cyan]\n\n" +
+                "Available modes:\n" +
+                "• [yellow]personal[/yellow] - Personal AI assistant (default)\n" +
+                "• [yellow]company[/yellow] - AI software development company\n\n" +
+                "Switch with: /mode <mode_name>",
+                title="NOVA Operation Mode",
+                box=box.ROUNDED
+            ))
+        else:
+            # Switch mode
+            mode = args.strip().lower()
+            if mode in ['personal', 'company']:
+                success = await self.nova_core.switch_mode(mode)
+                if success:
+                    self.console.print(f"[green]✓[/green] Switched to {mode} mode")
+                    
+                    if mode == 'company':
+                        self.console.print(Panel(
+                            "[bold cyan]Company Mode Activated![/bold cyan]\n\n" +
+                            "You now have access to:\n" +
+                            "• AI development team with legendary personalities\n" +
+                            "• Project management capabilities\n" +
+                            "• Automated software development\n\n" +
+                            "Commands:\n" +
+                            "• /company - Show company dashboard\n" +
+                            "• /project create <brief> - Create new project\n" +
+                            "• /project list - List all projects\n" +
+                            "• /team - Show AI team members",
+                            title="Legendary Ventures",
+                            box=box.ROUNDED
+                        ))
+                else:
+                    self.console.print(f"[red]Failed to switch to {mode} mode[/red]")
+            else:
+                self.console.print(f"[red]Invalid mode: {mode}[/red]")
+                
+    async def handle_company_command(self, args: str):
+        """Handle company-related commands"""
+        if self.nova_core.get_current_mode() != 'company':
+            self.console.print("[yellow]Company commands require company mode. Use: /mode company[/yellow]")
+            return
+            
+        dashboard = await self.nova_core.get_company_dashboard()
+        if not dashboard:
+            self.console.print("[red]Company dashboard not available[/red]")
+            return
+            
+        # Create company dashboard table
+        table = Table(title="Legendary Ventures Dashboard", box=box.ROUNDED)
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+        
+        table.add_row("Active Projects", str(dashboard['active_projects']))
+        table.add_row("Completed Projects", str(dashboard['completed_projects']))
+        table.add_row("AI Agents", str(dashboard['total_agents']))
+        table.add_row("Team Utilization", f"{dashboard['utilization']:.1%}")
+        
+        self.console.print(table)
+        
+        # Show active projects
+        if dashboard['projects']:
+            projects_table = Table(title="Active Projects", box=box.ROUNDED)
+            projects_table.add_column("ID", style="cyan")
+            projects_table.add_column("Name", style="yellow")
+            projects_table.add_column("Status", style="green")
+            projects_table.add_column("Progress", style="blue")
+            
+            for project in dashboard['projects']:
+                projects_table.add_row(
+                    project['id'],
+                    project['name'],
+                    project['status'],
+                    f"{project['progress']}%"
+                )
+                
+            self.console.print(projects_table)
+            
+    async def handle_project_command(self, args: str):
+        """Handle project-related commands"""
+        if self.nova_core.get_current_mode() != 'company':
+            self.console.print("[yellow]Project commands require company mode. Use: /mode company[/yellow]")
+            return
+            
+        if not args:
+            self.console.print(Panel(
+                "Project commands:\n" +
+                "• /project create <brief> - Create new project\n" +
+                "• /project list - List all projects\n" +
+                "• /project show <id> - Show project details\n" +
+                "• /project update <id> <progress> - Update project progress",
+                title="Project Management",
+                box=box.ROUNDED
+            ))
+            return
+            
+        parts = args.split(maxsplit=1)
+        subcommand = parts[0].lower()
+        
+        if subcommand == 'create' and len(parts) > 1:
+            brief = parts[1]
+            self.console.print(f"[cyan]Creating project: {brief[:50]}...[/cyan]")
+            
+            # Create project through company
+            result = await self.nova_core.company.create_project(brief)
+            
+            if result['success']:
+                self.console.print(Panel(
+                    f"[green]✓ Project created successfully![/green]\n\n" +
+                    f"ID: [bold]{result['id']}[/bold]\n" +
+                    f"Name: {result['name']}\n" +
+                    f"Team: {', '.join(result['team'])}\n" +
+                    f"Timeline: {result['timeline']}\n\n" +
+                    f"First steps:\n" +
+                    '\n'.join(f"• {step}" for step in result['first_steps']),
+                    title="New Project",
+                    box=box.ROUNDED
+                ))
+            else:
+                self.console.print(f"[red]Failed to create project: {result['reason']}[/red]")
+                
+        elif subcommand == 'list':
+            dashboard = await self.nova_core.get_company_dashboard()
+            if dashboard and dashboard['projects']:
+                table = Table(title="All Projects", box=box.ROUNDED)
+                table.add_column("ID", style="cyan")
+                table.add_column("Name", style="yellow")
+                table.add_column("Status", style="green")
+                table.add_column("Progress", style="blue")
+                table.add_column("Team Size", style="magenta")
+                
+                for project in dashboard['projects']:
+                    table.add_row(
+                        project['id'],
+                        project['name'],
+                        project['status'],
+                        f"{project['progress']}%",
+                        str(project['team_size'])
+                    )
+                    
+                self.console.print(table)
+            else:
+                self.console.print("[dim]No projects found[/dim]")
+                
+    async def show_team_info(self):
+        """Show AI team information"""
+        if self.nova_core.get_current_mode() != 'company':
+            self.console.print("[yellow]Team info requires company mode. Use: /mode company[/yellow]")
+            return
+            
+        dashboard = await self.nova_core.get_company_dashboard()
+        if not dashboard:
+            return
+            
+        table = Table(title="AI Development Team", box=box.ROUNDED)
+        table.add_column("Role", style="cyan")
+        table.add_column("Personality", style="yellow")
+        table.add_column("Expertise", style="green")
+        
+        team_expertise = {
+            'buffett': 'Business strategy, ROI analysis, long-term value',
+            'linus': 'System architecture, code quality, performance',
+            'jobs': 'Product vision, user experience, innovation',
+            'ive': 'Design excellence, minimalism, aesthetics',
+            'carmack': 'Graphics, optimization, low-level programming',
+            'musk': 'Scale thinking, first principles, rapid iteration',
+            'bezos': 'Customer focus, platform strategy, operations'
+        }
+        
+        for member in dashboard['team']:
+            role = member['role'].replace('_', ' ').title()
+            personality = member['personality'].title()
+            expertise = team_expertise.get(member['personality'], 'Multi-domain expertise')
+            
+            table.add_row(role, personality, expertise)
+            
+        self.console.print(table)
+        
+        # Show personality stats if available
+        if hasattr(self.nova_core, 'unified_engine'):
+            stats = self.nova_core.unified_engine.get_personality_stats()
+            if stats.get('mode') == 'company':
+                self.console.print(Panel(
+                    f"Total interactions: {stats['total_uses']}\n" +
+                    f"Current personality: {stats['current_mode']}",
+                    title="Team Statistics",
+                    box=box.ROUNDED
+                ))

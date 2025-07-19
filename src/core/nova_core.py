@@ -19,6 +19,7 @@ from .model_manager import AdaptiveModelManager
 from ..memory.persistent_memory import PersistentMemory
 from ..setup.interactive_setup import InteractiveSetup
 from ..ai.reasoning_engine import ReasoningEngine as AIReasoningEngine
+from .unified_engine import UnifiedEngine, OperationMode
 from ..automation.mac_automation import MacAutomationLayer
 from ..cli.terminal_interface import NOVATerminalInterface
 from ..models import (
@@ -71,8 +72,13 @@ class NOVACore:
             
         self.model_manager = AdaptiveModelManager(models_path)
         self.ai_engine = AIReasoningEngine()
+        self.unified_engine = UnifiedEngine()
         self.automation = MacAutomationLayer()
         self.terminal = NOVATerminalInterface(nova_core=self)
+        
+        # Company mode support
+        self.mode = OperationMode.PERSONAL
+        self.company = None  # Will be initialized if company mode is activated
         
         # State
         self.system_profile: Optional[SystemProfile] = None
@@ -101,6 +107,9 @@ class NOVACore:
             available_models = self._get_available_models()
             await self.ai_engine.initialize(available_models)
             
+            # Initialize unified engine
+            await self.unified_engine.initialize(available_models)
+            
             self.logger.info("NOVA initialized successfully")
             return True
             
@@ -120,6 +129,9 @@ class NOVACore:
             # Initialize AI engine with discovered capabilities
             available_models = self._get_available_models()
             await self.ai_engine.initialize(available_models)
+            
+            # Initialize unified engine
+            await self.unified_engine.initialize(available_models)
             
             self.is_first_run = False
             return True
@@ -183,8 +195,20 @@ class NOVACore:
                 requires_web_access=self._check_web_access(request)
             )
             
-            # Process with AI engine
-            ai_response = await self.ai_engine.process_task(task)
+            # Process with appropriate engine based on mode
+            if self.mode == OperationMode.PERSONAL:
+                ai_response = await self.ai_engine.process_task(task)
+            else:
+                # Use unified engine in company mode
+                unified_response = await self.unified_engine.process_task(task)
+                # Convert to AIResponse-like format for compatibility
+                ai_response = type('AIResponse', (), {
+                    'content': unified_response.content,
+                    'model_used': unified_response.model_used,
+                    'actions': unified_response.actions,
+                    'tokens_used': unified_response.tokens_used,
+                    'cost': unified_response.cost
+                })
             
             # Execute actions if any
             actions_taken = []
@@ -295,13 +319,44 @@ class NOVACore:
         
         return task_id
         
+    async def switch_mode(self, mode: str) -> bool:
+        """Switch between personal and company modes"""
+        try:
+            new_mode = OperationMode(mode.lower())
+            self.mode = new_mode
+            self.unified_engine.set_mode(new_mode)
+            
+            # Initialize company if switching to company mode
+            if new_mode == OperationMode.COMPANY and self.company is None:
+                from ..legendary.company.legendary_ventures import LegendaryVentures
+                self.company = LegendaryVentures()
+                await self.company.initialize()
+                
+            self.logger.info(f"Switched to {mode} mode")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to switch mode: {e}")
+            return False
+            
+    def get_current_mode(self) -> str:
+        """Get current operation mode"""
+        return self.mode.value
+        
+    async def get_company_dashboard(self) -> Optional[Dict[str, Any]]:
+        """Get company dashboard (company mode only)"""
+        if self.mode == OperationMode.COMPANY and self.company:
+            return await self.company.get_dashboard()
+        return None
+        
     async def get_system_status(self) -> Dict[str, Any]:
         """Get current system status"""
         system_info = await self.automation.get_system_info()
         ai_info = self.ai_engine.get_model_info()
         memory_stats = await self.memory.get_memory_stats(self.user_profile)
         
-        return {
+        status = {
+            'mode': self.mode.value,
             'system': {
                 'tier': self.system_profile.performance_tier if self.system_profile else 'Unknown',
                 'cpu': system_info.get('cpu_percent', 0),
@@ -320,6 +375,17 @@ class NOVACore:
                 'storage_mb': memory_stats['total_size_mb']
             }
         }
+        
+        # Add company info if in company mode
+        if self.mode == OperationMode.COMPANY and self.company:
+            company_dashboard = await self.company.get_dashboard()
+            status['company'] = {
+                'active_projects': company_dashboard.get('active_projects', 0),
+                'total_agents': company_dashboard.get('total_agents', 0),
+                'utilization': company_dashboard.get('utilization', 0)
+            }
+            
+        return status
         
     async def get_memory_summary(self) -> Dict[str, Any]:
         """Get memory summary for display"""
