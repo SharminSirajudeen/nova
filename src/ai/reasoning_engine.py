@@ -21,6 +21,7 @@ from ..models import (
 )
 from ..interfaces import IAIEngine
 from .self_analysis import SelfAnalysisEngine
+from ..core.model_strategy import ModelStrategy
 
 
 class CostOptimizedRouter:
